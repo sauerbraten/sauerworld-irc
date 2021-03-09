@@ -13,7 +13,7 @@ secrets:
 tasks:
   - build: |
       cd sauerworld-irc
-      go build
+      go build -tags netgo
   - deploy: |
       cd sauerworld-irc
       if [[ $GITHUB_REF != "refs/heads/main" ]]; then exit 0; fi # only deploy main branch
