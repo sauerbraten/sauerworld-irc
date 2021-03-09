@@ -6,22 +6,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sauerbraten/pubsub"
 	"github.com/sauerbraten/sauerworld-irc/config"
 )
 
 func main() {
-	proxy := pubsub.NewBroker()
-
-	fromIRC, pub := proxy.Subscribe("fromirc")
-	i, stopIRC := setupIRC(pub)
-
-	fromDiscord, pub := proxy.Subscribe("fromdiscord")
-	d, stopDiscord := setupDiscord(pub)
+	d, fromDiscord, stopDiscord := setupDiscord()
+	i, fromIRC, stopIRC := setupIRC(d)
 
 	go func() {
 		for m := range fromIRC {
-			_, err := d.ChannelMessageSend(config.Discord.ChannelID, string(m))
+			_, err := d.ChannelMessageSend(config.Discord.ChannelID, m)
 			if err != nil {
 				log.Printf("discord: sending message '%s': %v\n", m, err)
 			}
@@ -30,7 +24,7 @@ func main() {
 
 	go func() {
 		for m := range fromDiscord {
-			i.Privmsg(config.IRC.Channel, string(m))
+			i.Privmsg(config.IRC.Channel, m)
 		}
 	}()
 

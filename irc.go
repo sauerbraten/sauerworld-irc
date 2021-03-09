@@ -3,13 +3,15 @@ package main
 import (
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 
+	"github.com/bwmarrin/discordgo"
 	irc "github.com/fluffle/goirc/client"
-	"github.com/sauerbraten/pubsub"
 	"github.com/sauerbraten/sauerworld-irc/config"
 )
 
-func setupIRC(pub *pubsub.Publisher) (*irc.Conn, func()) {
+func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 	i := irc.SimpleClient(config.IRC.BotName, config.IRC.BotName, config.IRC.BotMaintainer)
 
 	var ownJoinHandler irc.Remover
@@ -24,7 +26,8 @@ func setupIRC(pub *pubsub.Publisher) (*irc.Conn, func()) {
 		log.Println("irc: connected")
 		i.Join(config.IRC.Channel)
 	})
-	reconnectHandler := i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, _ *irc.Line) {
+
+	disconnectHandler := i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, _ *irc.Line) {
 		log.Println("irc: disconnected")
 		err := i.ConnectTo(config.IRC.ServerAddress)
 		if err != nil {
@@ -32,30 +35,41 @@ func setupIRC(pub *pubsub.Publisher) (*irc.Conn, func()) {
 		}
 	})
 
+	fromIRC := make(chan string, 10)
+	i.HandleFunc(irc.PRIVMSG, func(i *irc.Conn, line *irc.Line) {
+		if !line.Public() || line.Target() != config.IRC.Channel || line.Nick == i.Me().Nick {
+			return
+		}
+		fromIRC <- i2d(d, line)
+	})
+
 	err := i.ConnectTo(config.IRC.ServerAddress)
 	if err != nil {
 		log.Fatalf("irc: could not connect to server: %s\n", err)
 	}
 
-	i.HandleFunc(irc.PRIVMSG, func(i *irc.Conn, line *irc.Line) {
-		if !line.Public() || line.Target() != config.IRC.Channel || line.Nick == i.Me().Nick {
-			return
-		}
-		pub.Publish([]byte(i2d(line)))
-	})
-
-	return i, func() {
-		reconnectHandler.Remove()
+	return i, fromIRC, func() {
+		disconnectHandler.Remove()
 		ircDisconnected := make(chan struct{}, 1)
 		i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, _ *irc.Line) {
 			close(ircDisconnected)
 		})
 		i.Quit("see you!")
 		<-ircDisconnected
-		pub.Close()
 	}
 }
 
-func i2d(l *irc.Line) string {
-	return fmt.Sprintf("**<%s>** %s", l.Nick, l.Text())
+var mentionPattern = regexp.MustCompile(`@[^\s]+`)
+
+func i2d(d *discordgo.Session, l *irc.Line) string {
+	content := l.Text()
+	content = mentionPattern.ReplaceAllStringFunc(content, func(mention string) string {
+		name := strings.TrimSpace(mention)[1:]
+		if mention := name2mention(d, name); mention != "" {
+			return mention
+		}
+		return mention
+	})
+
+	return fmt.Sprintf("**<%s>** %s", l.Nick, content)
 }
