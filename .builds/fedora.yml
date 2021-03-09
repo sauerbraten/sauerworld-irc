@@ -1,0 +1,22 @@
+image: fedora/latest
+packages:
+  - go
+  - rsync
+sources:
+  - https://github.com/sauerbraten/sauerworld-irc
+environment:
+  DEPLOY: p1x.pw
+  GOFLAGS: "-mod=vendor"
+secrets:
+  - 956ddc04-c911-4147-bc90-30bb08276c3e # ci@p1x.pw ssh key
+  - 9e7104f8-ceba-4241-90d4-fd87baa2539b # ~/.sw-irc_discord_token
+tasks:
+  - build: |
+      cd sauerworld-irc
+      go build
+  - deploy: |
+      cd sauerworld-irc
+      if [[ $GITHUB_REF != "refs/heads/main" ]]; then exit 0; fi # only deploy main branch
+      ssh -o StrictHostKeyChecking=no ci@$DEPLOY 'mkdir -p ~/sauerworld-irc'
+      rsync --rsh="ssh -o StrictHostKeyChecking=no" -rPq sauerworld-irc .env ~/.sw-irc_discord_token ci@$DEPLOY:~/sauerworld-irc/
+      ssh -o StrictHostKeyChecking=no ci@$DEPLOY 'cd sauerworld-irc; echo DISCORD_TOKEN=$(cat .sw-irc_discord_token) >> .env; sudo systemctl restart sauerworld-irc'
