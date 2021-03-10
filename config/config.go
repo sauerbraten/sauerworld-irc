@@ -9,13 +9,15 @@ var (
 	IRC = struct {
 		ServerAddress string
 		Channel       string
-		BotName       string
-		BotMaintainer string
+		Nick          string
+		Username      string
+		Realname      string
 	}{
 		mustEnv("IRC_SERVER_ADDRESS"),
 		mustEnv("IRC_CHANNEL_NAME"),
-		mustEnv("IRC_BOT_NAME"),
-		mustEnv("IRC_BOT_MAINTAINER"),
+		mustEnv("IRC_NICK"),
+		mustEnv("IRC_USERNAME"),
+		mustEnv("IRC_REALNAME"),
 	}
 
 	Discord = struct {

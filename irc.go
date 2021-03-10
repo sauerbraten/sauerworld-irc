@@ -12,7 +12,7 @@ import (
 )
 
 func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
-	i := irc.SimpleClient(config.IRC.BotName, config.IRC.BotName, config.IRC.BotMaintainer)
+	i := irc.SimpleClient(config.IRC.Nick, config.IRC.Username, config.IRC.Realname)
 
 	var ownJoinHandler irc.Remover
 	ownJoinHandler = i.HandleFunc(irc.JOIN, func(i *irc.Conn, line *irc.Line) {
