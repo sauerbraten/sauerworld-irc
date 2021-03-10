@@ -29,7 +29,12 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 		if m.ChannelID != config.Discord.ChannelID || m.WebhookID != "" || m.Author.ID == d.State.User.ID {
 			return
 		}
-		fromDiscord <- d2i(d, m)
+		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m)), "\n") {
+			if i > 0 {
+				line = "    " + line
+			}
+			fromDiscord <- line
+		}
 	})
 
 	d.Identify.Intents = discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessages
