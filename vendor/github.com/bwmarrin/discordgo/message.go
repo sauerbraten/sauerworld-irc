@@ -123,6 +123,9 @@ type Message struct {
 	// This is a combination of bit masks; the presence of a certain permission can
 	// be checked by performing a bitwise AND between this int and the flag.
 	Flags MessageFlags `json:"flags"`
+
+	// The message being replied to.
+	ReferencedMessage *Message `json:"referenced_message"`
 }
 
 // MessageFlags is the flags of "message" (see MessageFlags* consts)

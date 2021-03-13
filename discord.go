@@ -26,10 +26,23 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 
 	fromDiscord := make(chan string, 10)
 	d.AddHandler(func(d *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.ChannelID != config.Discord.ChannelID || m.WebhookID != "" || m.Author.ID == d.State.User.ID {
+		if m.ChannelID != config.Discord.ChannelID ||
+			(m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply) ||
+			m.WebhookID != "" ||
+			m.Author.ID == d.State.User.ID {
 			return
 		}
-		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m)), "\n") {
+
+		if m.Type == discordgo.MessageTypeReply {
+			m.ReferencedMessage.GuildID = m.GuildID
+			inReplyTo := d2i(d, m.ReferencedMessage)
+			if len(inReplyTo) > 60 {
+				inReplyTo = inReplyTo[:56] + " […]"
+			}
+			fromDiscord <- fmt.Sprintf("<%s> %s", author(d, m.Message), inReplyTo)
+		}
+
+		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m.Message)), "\n") {
 			if i > 0 {
 				line = "    " + line
 			}
@@ -52,14 +65,28 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 	}
 }
 
+func author(d *discordgo.Session, m *discordgo.Message) string {
+	if m.Member != nil && m.Member.Nick != "" {
+		return m.Member.Nick
+	}
+	author, err := getMember(d, m.GuildID, m.Author.ID)
+	if err != nil {
+		log.Printf("resolving message author name: %v\n", err)
+		log.Printf("message: %+v\n", m)
+		log.Printf("author:  %+v\n", m.Author)
+	} else if author.Nick != "" {
+		return author.Nick
+	}
+	return m.Author.Username
+}
+
 var (
 	channelPattern     = regexp.MustCompile("<#[^>]+>")
 	customEmojiPattern = regexp.MustCompile(`<(:[^:]+:)\d+>`)
 )
 
-func d2i(d *discordgo.Session, m *discordgo.MessageCreate) string {
+func d2i(d *discordgo.Session, m *discordgo.Message) string {
 	// user and role mentions
-
 	replacements := []string{}
 	for _, user := range m.Mentions {
 		nick := user.Username
@@ -85,7 +112,6 @@ func d2i(d *discordgo.Session, m *discordgo.MessageCreate) string {
 	content := strings.NewReplacer(replacements...).Replace(m.Content)
 
 	// channel mentions
-
 	content = channelPattern.ReplaceAllStringFunc(content, func(mention string) string {
 		channel, err := getChannel(d, mention[2:len(mention)-1])
 		if err != nil {
@@ -96,14 +122,9 @@ func d2i(d *discordgo.Session, m *discordgo.MessageCreate) string {
 	})
 
 	// custom emojis
-
 	content = customEmojiPattern.ReplaceAllString(content, "$1")
 
-	authorName := m.Author.Username
-	if m.Member.Nick != "" {
-		authorName = m.Member.Nick
-	}
-
+	// attachments (files, e.g. images)
 	attachmentURLs := []string{}
 	for _, a := range m.Attachments {
 		attachmentURLs = append(attachmentURLs, a.ProxyURL)
@@ -111,11 +132,11 @@ func d2i(d *discordgo.Session, m *discordgo.MessageCreate) string {
 
 	if len(attachmentURLs) > 0 {
 		if len(content) > 0 {
-			return fmt.Sprintf("<%s> %s %s", authorName, content, strings.Join(attachmentURLs, ", "))
+			return fmt.Sprintf("<%s> %s %s", author(d, m), content, strings.Join(attachmentURLs, " "))
 		}
-		return fmt.Sprintf("<%s> %s", authorName, strings.Join(attachmentURLs, ", "))
+		return fmt.Sprintf("<%s> %s", author(d, m), strings.Join(attachmentURLs, " "))
 	}
-	return fmt.Sprintf("<%s> %s", authorName, content)
+	return fmt.Sprintf("<%s> %s", author(d, m), content)
 }
 
 func getMember(d *discordgo.Session, guildID, userID string) (*discordgo.Member, error) {
