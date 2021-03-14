@@ -39,7 +39,7 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 			if len(inReplyTo) > 60 {
 				inReplyTo = inReplyTo[:56] + " […]"
 			}
-			fromDiscord <- fmt.Sprintf("<%s> %s", author(d, m.Message), inReplyTo)
+			fromDiscord <- fmt.Sprintf("<%s> > %s", author(d, m.Message), inReplyTo)
 		}
 
 		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m.Message)), "\n") {
@@ -130,13 +130,22 @@ func d2i(d *discordgo.Session, m *discordgo.Message) string {
 		attachmentURLs = append(attachmentURLs, a.ProxyURL)
 	}
 
+	authorName := ""
+	if m.Author.ID == d.State.User.ID {
+		// we're formatting one of our own message (for example, as context for
+		// a reply to something someone on IRC said), so we don't prepend our
+		// own nick and instead rely on the IRC nick being part of the message
+	} else {
+		authorName = fmt.Sprintf("<%s> ", author(d, m))
+	}
+
 	if len(attachmentURLs) > 0 {
 		if len(content) > 0 {
-			return fmt.Sprintf("<%s> %s %s", author(d, m), content, strings.Join(attachmentURLs, " "))
+			return fmt.Sprintf("%s%s %s", authorName, content, strings.Join(attachmentURLs, " "))
 		}
-		return fmt.Sprintf("<%s> %s", author(d, m), strings.Join(attachmentURLs, " "))
+		return fmt.Sprintf("%s%s", authorName, strings.Join(attachmentURLs, " "))
 	}
-	return fmt.Sprintf("<%s> %s", author(d, m), content)
+	return fmt.Sprintf("%s%s", authorName, content)
 }
 
 func getMember(d *discordgo.Session, guildID, userID string) (*discordgo.Member, error) {
