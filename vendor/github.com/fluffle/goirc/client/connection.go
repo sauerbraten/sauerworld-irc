@@ -2,7 +2,9 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -36,15 +38,15 @@ type Conn struct {
 
 	// I/O stuff to server
 	dialer      *net.Dialer
-	proxyDialer proxy.Dialer
+	proxyDialer proxy.ContextDialer
 	sock        net.Conn
 	io          *bufio.ReadWriter
 	in          chan *Line
 	out         chan string
 	connected   bool
 
-	// Control channel and WaitGroup for goroutines
-	die chan struct{}
+	// CancelFunc and WaitGroup for goroutines
+	die context.CancelFunc
 	wg  sync.WaitGroup
 
 	// Internal counters for flood protection
@@ -293,7 +295,7 @@ func (conn *Conn) initialise() {
 	conn.sock = nil
 	conn.in = make(chan *Line, 32)
 	conn.out = make(chan string, 32)
-	conn.die = make(chan struct{})
+	conn.die = nil
 	if conn.st != nil {
 		conn.st.Wipe()
 	}
@@ -304,11 +306,16 @@ func (conn *Conn) initialise() {
 // Config.Server to host, Config.Pass to pass if one is provided, and then
 // calls Connect.
 func (conn *Conn) ConnectTo(host string, pass ...string) error {
+	return conn.ConnectToContext(context.Background(), host, pass...)
+}
+
+// ConnectToContext works like ConnectTo but uses the provided context.
+func (conn *Conn) ConnectToContext(ctx context.Context, host string, pass ...string) error {
 	conn.cfg.Server = host
 	if len(pass) > 0 {
 		conn.cfg.Pass = pass[0]
 	}
-	return conn.Connect()
+	return conn.ConnectContext(ctx)
 }
 
 // Connect connects the IRC client to the server configured in Config.Server.
@@ -323,10 +330,15 @@ func (conn *Conn) ConnectTo(host string, pass ...string) error {
 // handler for the CONNECTED event is used to perform any initial client work
 // like joining channels and sending messages.
 func (conn *Conn) Connect() error {
+	return conn.ConnectContext(context.Background())
+}
+
+// ConnectContext works like Connect but uses the provided context.
+func (conn *Conn) ConnectContext(ctx context.Context) error {
 	// We don't want to hold conn.mu while firing the REGISTER event,
 	// and it's much easier and less error prone to defer the unlock,
 	// so the connect mechanics have been delegated to internalConnect.
-	err := conn.internalConnect()
+	err := conn.internalConnect(ctx)
 	if err == nil {
 		conn.dispatch(&Line{Cmd: REGISTER, Time: time.Now()})
 	}
@@ -334,7 +346,7 @@ func (conn *Conn) Connect() error {
 }
 
 // internalConnect handles the work of actually connecting to the server.
-func (conn *Conn) internalConnect() error {
+func (conn *Conn) internalConnect(ctx context.Context) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	conn.initialise()
@@ -359,20 +371,24 @@ func (conn *Conn) internalConnect() error {
 		if err != nil {
 			return err
 		}
-		conn.proxyDialer, err = proxy.FromURL(proxyURL, conn.dialer)
+		proxyDialer, err := proxy.FromURL(proxyURL, conn.dialer)
 		if err != nil {
 			return err
 		}
-
+		contextProxyDialer, ok := proxyDialer.(proxy.ContextDialer)
+		if !ok {
+			return errors.New("Dialer for proxy does not support context")
+		}
+		conn.proxyDialer = contextProxyDialer
 		logging.Info("irc.Connect(): Connecting to %s.", conn.cfg.Server)
-		if s, err := conn.proxyDialer.Dial("tcp", conn.cfg.Server); err == nil {
+		if s, err := conn.proxyDialer.DialContext(ctx, "tcp", conn.cfg.Server); err == nil {
 			conn.sock = s
 		} else {
 			return err
 		}
 	} else {
 		logging.Info("irc.Connect(): Connecting to %s.", conn.cfg.Server)
-		if s, err := conn.dialer.Dial("tcp", conn.cfg.Server); err == nil {
+		if s, err := conn.dialer.DialContext(ctx, "tcp", conn.cfg.Server); err == nil {
 			conn.sock = s
 		} else {
 			return err
@@ -388,24 +404,25 @@ func (conn *Conn) internalConnect() error {
 		conn.sock = s
 	}
 
-	conn.postConnect(true)
+	conn.postConnect(ctx, true)
 	conn.connected = true
 	return nil
 }
 
 // postConnect performs post-connection setup, for ease of testing.
-func (conn *Conn) postConnect(start bool) {
+func (conn *Conn) postConnect(ctx context.Context, start bool) {
 	conn.io = bufio.NewReadWriter(
 		bufio.NewReader(conn.sock),
 		bufio.NewWriter(conn.sock))
 	if start {
+		ctx, conn.die = context.WithCancel(ctx)
 		conn.wg.Add(3)
-		go conn.send()
+		go conn.send(ctx)
 		go conn.recv()
-		go conn.runLoop()
+		go conn.runLoop(ctx)
 		if conn.cfg.PingFreq > 0 {
 			conn.wg.Add(1)
-			go conn.ping()
+			go conn.ping(ctx)
 		}
 	}
 }
@@ -418,8 +435,8 @@ func hasPort(s string) bool {
 
 // send is started as a goroutine after a connection is established.
 // It shuttles data from the output channel to write(), and is killed
-// when Conn.die is closed.
-func (conn *Conn) send() {
+// when the context is cancelled.
+func (conn *Conn) send(ctx context.Context) {
 	for {
 		select {
 		case line := <-conn.out:
@@ -430,7 +447,7 @@ func (conn *Conn) send() {
 				conn.Close()
 				return
 			}
-		case <-conn.die:
+		case <-ctx.Done():
 			// control channel closed, bail out
 			conn.wg.Done()
 			return
@@ -467,14 +484,14 @@ func (conn *Conn) recv() {
 
 // ping is started as a goroutine after a connection is established, as
 // long as Config.PingFreq >0. It pings the server every PingFreq seconds.
-func (conn *Conn) ping() {
+func (conn *Conn) ping(ctx context.Context) {
 	defer conn.wg.Done()
 	tick := time.NewTicker(conn.cfg.PingFreq)
 	for {
 		select {
 		case <-tick.C:
 			conn.Ping(fmt.Sprintf("%d", time.Now().UnixNano()))
-		case <-conn.die:
+		case <-ctx.Done():
 			// control channel closed, bail out
 			tick.Stop()
 			return
@@ -485,13 +502,13 @@ func (conn *Conn) ping() {
 // runLoop is started as a goroutine after a connection is established.
 // It pulls Lines from the input channel and dispatches them to any
 // handlers that have been registered for that IRC verb.
-func (conn *Conn) runLoop() {
+func (conn *Conn) runLoop(ctx context.Context) {
 	defer conn.wg.Done()
 	for {
 		select {
 		case line := <-conn.in:
 			conn.dispatch(line)
-		case <-conn.die:
+		case <-ctx.Done():
 			// control channel closed, bail out
 			return
 		}
@@ -556,7 +573,9 @@ func (conn *Conn) Close() error {
 	logging.Info("irc.Close(): Disconnected from server.")
 	conn.connected = false
 	err := conn.sock.Close()
-	close(conn.die)
+	if conn.die != nil {
+		conn.die()
+	}
 	// Drain both in and out channels to avoid a deadlock if the buffers
 	// have filled. See TestSendDeadlockOnFullBuffer in connection_test.go.
 	conn.drainIn()
