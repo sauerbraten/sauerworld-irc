@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -94,7 +95,7 @@ type Session struct {
 	// The user agent used for REST APIs
 	UserAgent string
 
-	// Stores the last HeartbeatAck that was recieved (in UTC)
+	// Stores the last HeartbeatAck that was received (in UTC)
 	LastHeartbeatAck time.Time
 
 	// Stores the last Heartbeat sent (in UTC)
@@ -152,14 +153,14 @@ type Integration struct {
 	SyncedAt          Timestamp          `json:"synced_at"`
 }
 
-//ExpireBehavior of Integration
+// ExpireBehavior of Integration
 // https://discord.com/developers/docs/resources/guild#integration-object-integration-expire-behaviors
 type ExpireBehavior int
 
 // Block of valid ExpireBehaviors
 const (
-	ExpireBehaviorRemoveRole ExpireBehavior = iota
-	ExpireBehaviorKick
+	ExpireBehaviorRemoveRole ExpireBehavior = 0
+	ExpireBehaviorKick       ExpireBehavior = 1
 )
 
 // IntegrationAccount is integration account information
@@ -217,7 +218,7 @@ type TargetUserType int
 
 // Block contains known TargetUserType values
 const (
-	TargetUserTypeStream TargetUserType = iota
+	TargetUserTypeStream TargetUserType = 1
 )
 
 // ChannelType is the type of a Channel
@@ -225,13 +226,13 @@ type ChannelType int
 
 // Block contains known ChannelType values
 const (
-	ChannelTypeGuildText ChannelType = iota
-	ChannelTypeDM
-	ChannelTypeGuildVoice
-	ChannelTypeGroupDM
-	ChannelTypeGuildCategory
-	ChannelTypeGuildNews
-	ChannelTypeGuildStore
+	ChannelTypeGuildText     ChannelType = 0
+	ChannelTypeDM            ChannelType = 1
+	ChannelTypeGuildVoice    ChannelType = 2
+	ChannelTypeGroupDM       ChannelType = 3
+	ChannelTypeGuildCategory ChannelType = 4
+	ChannelTypeGuildNews     ChannelType = 5
+	ChannelTypeGuildStore    ChannelType = 6
 )
 
 // A Channel holds all data related to an individual Discord channel.
@@ -329,8 +330,8 @@ type PermissionOverwriteType int
 
 // The possible permission overwrite types.
 const (
-	PermissionOverwriteTypeRole PermissionOverwriteType = iota
-	PermissionOverwriteTypeMember
+	PermissionOverwriteTypeRole   PermissionOverwriteType = 0
+	PermissionOverwriteTypeMember PermissionOverwriteType = 1
 )
 
 // A PermissionOverwrite holds permission overwrite data for a Channel
@@ -352,6 +353,11 @@ type Emoji struct {
 	Animated      bool     `json:"animated"`
 	Available     bool     `json:"available"`
 }
+
+// EmojiRegex is the regex used to find and identify emojis in messages
+var (
+	EmojiRegex = regexp.MustCompile(`<(a|):[A-z0-9_~]+:[0-9]{18}>`)
+)
 
 // MessageFormat returns a correctly formatted Emoji for use in Message content and embeds
 func (e *Emoji) MessageFormat() string {
@@ -382,11 +388,11 @@ type VerificationLevel int
 
 // Constants for VerificationLevel levels from 0 to 4 inclusive
 const (
-	VerificationLevelNone VerificationLevel = iota
-	VerificationLevelLow
-	VerificationLevelMedium
-	VerificationLevelHigh
-	VerificationLevelVeryHigh
+	VerificationLevelNone     VerificationLevel = 0
+	VerificationLevelLow      VerificationLevel = 1
+	VerificationLevelMedium   VerificationLevel = 2
+	VerificationLevelHigh     VerificationLevel = 3
+	VerificationLevelVeryHigh VerificationLevel = 4
 )
 
 // ExplicitContentFilterLevel type definition
@@ -394,9 +400,9 @@ type ExplicitContentFilterLevel int
 
 // Constants for ExplicitContentFilterLevel levels from 0 to 2 inclusive
 const (
-	ExplicitContentFilterDisabled ExplicitContentFilterLevel = iota
-	ExplicitContentFilterMembersWithoutRoles
-	ExplicitContentFilterAllMembers
+	ExplicitContentFilterDisabled            ExplicitContentFilterLevel = 0
+	ExplicitContentFilterMembersWithoutRoles ExplicitContentFilterLevel = 1
+	ExplicitContentFilterAllMembers          ExplicitContentFilterLevel = 2
 )
 
 // MfaLevel type definition
@@ -404,8 +410,8 @@ type MfaLevel int
 
 // Constants for MfaLevel levels from 0 to 1 inclusive
 const (
-	MfaLevelNone MfaLevel = iota
-	MfaLevelElevated
+	MfaLevelNone     MfaLevel = 0
+	MfaLevelElevated MfaLevel = 1
 )
 
 // PremiumTier type definition
@@ -413,10 +419,10 @@ type PremiumTier int
 
 // Constants for PremiumTier levels from 0 to 3 inclusive
 const (
-	PremiumTierNone PremiumTier = iota
-	PremiumTier1
-	PremiumTier2
-	PremiumTier3
+	PremiumTierNone PremiumTier = 0
+	PremiumTier1    PremiumTier = 1
+	PremiumTier2    PremiumTier = 2
+	PremiumTier3    PremiumTier = 3
 )
 
 // A Guild holds all data related to a specific Discord Guild.  Guilds are also
@@ -572,14 +578,48 @@ type Guild struct {
 	Permissions int64 `json:"permissions,string"`
 }
 
+// A GuildPreview holds data related to a specific public Discord Guild, even if the user is not in the guild.
+type GuildPreview struct {
+	// The ID of the guild.
+	ID string `json:"id"`
+
+	// The name of the guild. (2–100 characters)
+	Name string `json:"name"`
+
+	// The hash of the guild's icon. Use Session.GuildIcon
+	// to retrieve the icon itself.
+	Icon string `json:"icon"`
+
+	// The hash of the guild's splash.
+	Splash string `json:"splash"`
+
+	// The hash of the guild's discovery splash.
+	DiscoverySplash string `json:"discovery_splash"`
+
+	// A list of the custom emojis present in the guild.
+	Emojis []*Emoji `json:"emojis"`
+
+	// The list of enabled guild features
+	Features []string `json:"features"`
+
+	// Approximate number of members in this guild, returned from the GET /guild/<id> endpoint when with_counts is true
+	ApproximateMemberCount int `json:"approximate_member_count"`
+
+	// Approximate number of non-offline members in this guild, returned from the GET /guild/<id> endpoint when with_counts is true
+	ApproximatePresenceCount int `json:"approximate_presence_count"`
+
+	// the description for the guild
+	Description string `json:"description"`
+}
+
 // MessageNotifications is the notification level for a guild
 // https://discord.com/developers/docs/resources/guild#guild-object-default-message-notification-level
 type MessageNotifications int
 
 // Block containing known MessageNotifications values
 const (
-	MessageNotificationsAllMessages MessageNotifications = iota
-	MessageNotificationsOnlyMentions
+	MessageNotificationsAllMessages  MessageNotifications = 0
+	MessageNotificationsOnlyMentions MessageNotifications = 1
 )
 
 // SystemChannelFlag is the type of flags in the system channel (see SystemChannelFlag* consts)
@@ -588,8 +628,8 @@ type SystemChannelFlag int
 
 // Block containing known SystemChannelFlag values
 const (
-	SystemChannelFlagsSuppressJoin SystemChannelFlag = 1 << iota
-	SystemChannelFlagsSuppressPremium
+	SystemChannelFlagsSuppressJoin    SystemChannelFlag = 1 << 0
+	SystemChannelFlagsSuppressPremium SystemChannelFlag = 1 << 1
 )
 
 // IconURL returns a URL to the guild's icon.
@@ -757,6 +797,9 @@ type Member struct {
 
 	// Is true while the member hasn't accepted the membership screen.
 	Pending bool `json:"pending"`
+
+	// Total permissions of the member in the channel, including overrides, returned when in the interaction object.
+	Permissions int64 `json:"permissions,string"`
 }
 
 // Mention creates a member mention
@@ -1053,42 +1096,6 @@ type APIErrorMessage struct {
 	Message string `json:"message"`
 }
 
-// Webhook stores the data for a webhook.
-type Webhook struct {
-	ID        string      `json:"id"`
-	Type      WebhookType `json:"type"`
-	GuildID   string      `json:"guild_id"`
-	ChannelID string      `json:"channel_id"`
-	User      *User       `json:"user"`
-	Name      string      `json:"name"`
-	Avatar    string      `json:"avatar"`
-	Token     string      `json:"token"`
-
-	// ApplicationID is the bot/OAuth2 application that created this webhook
-	ApplicationID string `json:"application_id,omitempty"`
-}
-
-// WebhookType is the type of Webhook (see WebhookType* consts) in the Webhook struct
-// https://discord.com/developers/docs/resources/webhook#webhook-object-webhook-types
-type WebhookType int
-
-// Valid WebhookType values
-const (
-	WebhookTypeIncoming WebhookType = iota
-	WebhookTypeChannelFollower
-)
-
-// WebhookParams is a struct for webhook params, used in the WebhookExecute command.
-type WebhookParams struct {
-	Content         string                  `json:"content,omitempty"`
-	Username        string                  `json:"username,omitempty"`
-	AvatarURL       string                  `json:"avatar_url,omitempty"`
-	TTS             bool                    `json:"tts,omitempty"`
-	File            string                  `json:"file,omitempty"`
-	Embeds          []*MessageEmbed         `json:"embeds,omitempty"`
-	AllowedMentions *MessageAllowedMentions `json:"allowed_mentions,omitempty"`
-}
-
 // MessageReaction stores the data for a message reaction.
 type MessageReaction struct {
 	UserID    string `json:"user_id"`
@@ -1116,9 +1123,74 @@ type GatewayStatusUpdate struct {
 // Activity defines the Activity sent with GatewayStatusUpdate
 // https://discord.com/developers/docs/topics/gateway#activity-object
 type Activity struct {
-	Name string       `json:"name"`
-	Type ActivityType `json:"type"`
-	URL  string       `json:"url,omitempty"`
+	Name          string       `json:"name"`
+	Type          ActivityType `json:"type"`
+	URL           string       `json:"url,omitempty"`
+	CreatedAt     time.Time    `json:"created_at"`
+	ApplicationID string       `json:"application_id,omitempty"`
+	State         string       `json:"state,omitempty"`
+	Details       string       `json:"details,omitempty"`
+	Timestamps    TimeStamps   `json:"timestamps,omitempty"`
+	Emoji         Emoji        `json:"emoji,omitempty"`
+	Party         Party        `json:"party,omitempty"`
+	Assets        Assets       `json:"assets,omitempty"`
+	Secrets       Secrets      `json:"secrets,omitempty"`
+	Instance      bool         `json:"instance,omitempty"`
+	Flags         int          `json:"flags,omitempty"`
+}
+
+// UnmarshalJSON is a custom unmarshaljson to make CreatedAt a time.Time instead of an int
+func (activity *Activity) UnmarshalJSON(b []byte) error {
+	temp := struct {
+		Name          string       `json:"name"`
+		Type          ActivityType `json:"type"`
+		URL           string       `json:"url,omitempty"`
+		CreatedAt     int64        `json:"created_at"`
+		ApplicationID string       `json:"application_id,omitempty"`
+		State         string       `json:"state,omitempty"`
+		Details       string       `json:"details,omitempty"`
+		Timestamps    TimeStamps   `json:"timestamps,omitempty"`
+		Emoji         Emoji        `json:"emoji,omitempty"`
+		Party         Party        `json:"party,omitempty"`
+		Assets        Assets       `json:"assets,omitempty"`
+		Secrets       Secrets      `json:"secrets,omitempty"`
+		Instance      bool         `json:"instance,omitempty"`
+		Flags         int          `json:"flags,omitempty"`
+	}{}
+	err := json.Unmarshal(b, &temp)
+	if err != nil {
+		return err
+	}
+	activity.CreatedAt = time.Unix(0, temp.CreatedAt*1000000)
+	activity.ApplicationID = temp.ApplicationID
+	activity.Assets = temp.Assets
+	activity.Details = temp.Details
+	activity.Emoji = temp.Emoji
+	activity.Flags = temp.Flags
+	activity.Instance = temp.Instance
+	activity.Name = temp.Name
+	activity.Party = temp.Party
+	activity.Secrets = temp.Secrets
+	activity.State = temp.State
+	activity.Timestamps = temp.Timestamps
+	activity.Type = temp.Type
+	activity.URL = temp.URL
+	return nil
+}
+
+// Party defines the Party field in the Activity struct
+// https://discord.com/developers/docs/topics/gateway#activity-object
+type Party struct {
+	ID   string `json:"id,omitempty"`
+	Size []int  `json:"size,omitempty"`
+}
+
+// Secrets defines the Secrets field for the Activity struct
+// https://discord.com/developers/docs/topics/gateway#activity-object
+type Secrets struct {
+	Join     string `json:"join,omitempty"`
+	Spectate string `json:"spectate,omitempty"`
+	Match    string `json:"match,omitempty"`
 }
 
 // ActivityType is the type of Activity (see ActivityType* consts) in the Activity struct
@@ -1127,11 +1199,11 @@ type ActivityType int
 
 // Valid ActivityType values
 const (
-	ActivityTypeGame ActivityType = iota
-	ActivityTypeStreaming
-	ActivityTypeListening
+	ActivityTypeGame      ActivityType = 0
+	ActivityTypeStreaming ActivityType = 1
+	ActivityTypeListening ActivityType = 2
 	//	ActivityTypeWatching // not valid in this use case?
-	ActivityTypeCustom = 4
+	ActivityTypeCustom ActivityType = 4
 )
 
 // Identify is sent during initial handshake with the discord gateway.
@@ -1160,48 +1232,52 @@ type IdentifyProperties struct {
 // Constants for the different bit offsets of text channel permissions
 const (
 	// Deprecated: PermissionReadMessages has been replaced with PermissionViewChannel for text and voice channels
-	PermissionReadMessages = 1 << (iota + 10)
-	PermissionSendMessages
-	PermissionSendTTSMessages
-	PermissionManageMessages
-	PermissionEmbedLinks
-	PermissionAttachFiles
-	PermissionReadMessageHistory
-	PermissionMentionEveryone
-	PermissionUseExternalEmojis
+	PermissionReadMessages       = 0x0000000000000400
+	PermissionSendMessages       = 0x0000000000000800
+	PermissionSendTTSMessages    = 0x0000000000001000
+	PermissionManageMessages     = 0x0000000000002000
+	PermissionEmbedLinks         = 0x0000000000004000
+	PermissionAttachFiles        = 0x0000000000008000
+	PermissionReadMessageHistory = 0x0000000000010000
+	PermissionMentionEveryone    = 0x0000000000020000
+	PermissionUseExternalEmojis  = 0x0000000000040000
+	PermissionUseSlashCommands   = 0x0000000080000000
 )
 
 // Constants for the different bit offsets of voice permissions
 const (
-	PermissionVoiceConnect = 1 << (iota + 20)
-	PermissionVoiceSpeak
-	PermissionVoiceMuteMembers
-	PermissionVoiceDeafenMembers
-	PermissionVoiceMoveMembers
-	PermissionVoiceUseVAD
-	PermissionVoicePrioritySpeaker = 1 << (iota + 2)
+	PermissionVoicePrioritySpeaker = 0x0000000000000100
+	PermissionVoiceStreamVideo     = 0x0000000000000200
+	PermissionVoiceConnect         = 0x0000000000100000
+	PermissionVoiceSpeak           = 0x0000000000200000
+	PermissionVoiceMuteMembers     = 0x0000000000400000
+	PermissionVoiceDeafenMembers   = 0x0000000000800000
+	PermissionVoiceMoveMembers     = 0x0000000001000000
+	PermissionVoiceUseVAD          = 0x0000000002000000
+	PermissionVoiceRequestToSpeak  = 0x0000000100000000
 )
 
 // Constants for general management.
 const (
-	PermissionChangeNickname = 1 << (iota + 26)
-	PermissionManageNicknames
-	PermissionManageRoles
-	PermissionManageWebhooks
-	PermissionManageEmojis
+	PermissionChangeNickname  = 0x0000000004000000
+	PermissionManageNicknames = 0x0000000008000000
+	PermissionManageRoles     = 0x0000000010000000
+	PermissionManageWebhooks  = 0x0000000020000000
+	PermissionManageEmojis    = 0x0000000040000000
 )
 
 // Constants for the different bit offsets of general permissions
 const (
-	PermissionCreateInstantInvite = 1 << iota
-	PermissionKickMembers
-	PermissionBanMembers
-	PermissionAdministrator
-	PermissionManageChannels
-	PermissionManageServer
-	PermissionAddReactions
-	PermissionViewAuditLogs
-	PermissionViewChannel = 1 << (iota + 2)
+	PermissionCreateInstantInvite = 0x0000000000000001
+	PermissionKickMembers         = 0x0000000000000002
+	PermissionBanMembers          = 0x0000000000000004
+	PermissionAdministrator       = 0x0000000000000008
+	PermissionManageChannels      = 0x0000000000000010
+	PermissionManageServer        = 0x0000000000000020
+	PermissionAddReactions        = 0x0000000000000040
+	PermissionViewAuditLogs       = 0x0000000000000080
+	PermissionViewChannel         = 0x0000000000000400
+	PermissionViewGuildInsights   = 0x0000000000080000
 
 	PermissionAllText = PermissionViewChannel |
 		PermissionSendMessages |
@@ -1296,21 +1372,21 @@ type Intent int
 
 // Constants for the different bit offsets of intents
 const (
-	IntentsGuilds Intent = 1 << iota
-	IntentsGuildMembers
-	IntentsGuildBans
-	IntentsGuildEmojis
-	IntentsGuildIntegrations
-	IntentsGuildWebhooks
-	IntentsGuildInvites
-	IntentsGuildVoiceStates
-	IntentsGuildPresences
-	IntentsGuildMessages
-	IntentsGuildMessageReactions
-	IntentsGuildMessageTyping
-	IntentsDirectMessages
-	IntentsDirectMessageReactions
-	IntentsDirectMessageTyping
+	IntentsGuilds                 Intent = 1 << 0
+	IntentsGuildMembers           Intent = 1 << 1
+	IntentsGuildBans              Intent = 1 << 2
+	IntentsGuildEmojis            Intent = 1 << 3
+	IntentsGuildIntegrations      Intent = 1 << 4
+	IntentsGuildWebhooks          Intent = 1 << 5
+	IntentsGuildInvites           Intent = 1 << 6
+	IntentsGuildVoiceStates       Intent = 1 << 7
+	IntentsGuildPresences         Intent = 1 << 8
+	IntentsGuildMessages          Intent = 1 << 9
+	IntentsGuildMessageReactions  Intent = 1 << 10
+	IntentsGuildMessageTyping     Intent = 1 << 11
+	IntentsDirectMessages         Intent = 1 << 12
+	IntentsDirectMessageReactions Intent = 1 << 13
+	IntentsDirectMessageTyping    Intent = 1 << 14
 
 	IntentsAllWithoutPrivileged = IntentsGuilds |
 		IntentsGuildBans |
