@@ -14,8 +14,10 @@ import (
 
 func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 	c := irc.NewConfig(config.IRC.Nick, config.IRC.Username, config.IRC.Realname)
-	c.SSL = true
-	c.SSLConfig = &tls.Config{ServerName: config.IRC.ServerName}
+	if config.IRC.TLS {
+		c.SSL = true
+		c.SSLConfig = &tls.Config{ServerName: config.IRC.ServerName}
+	}
 	c.Server = config.IRC.ServerName + ":" + config.IRC.ServerPort
 
 	i := irc.Client(c)
