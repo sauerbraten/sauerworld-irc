@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"regexp"
@@ -12,7 +13,12 @@ import (
 )
 
 func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
-	i := irc.SimpleClient(config.IRC.Nick, config.IRC.Username, config.IRC.Realname)
+	c := irc.NewConfig(config.IRC.Nick, config.IRC.Username, config.IRC.Realname)
+	c.SSL = true
+	c.SSLConfig = &tls.Config{ServerName: config.IRC.ServerName}
+	c.Server = config.IRC.ServerName + ":" + config.IRC.ServerPort
+
+	i := irc.Client(c)
 
 	var ownJoinHandler irc.Remover
 	ownJoinHandler = i.HandleFunc(irc.JOIN, func(i *irc.Conn, line *irc.Line) {
@@ -29,7 +35,7 @@ func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 
 	disconnectHandler := i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, _ *irc.Line) {
 		log.Println("irc: disconnected")
-		err := i.ConnectTo(config.IRC.ServerAddress)
+		err := i.Connect()
 		if err != nil {
 			log.Fatalf("irc: could not reconnect to server: %s\n", err)
 		}
@@ -43,7 +49,7 @@ func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 		fromIRC <- i2d(d, line)
 	})
 
-	err := i.ConnectTo(config.IRC.ServerAddress)
+	err := i.Connect()
 	if err != nil {
 		log.Fatalf("irc: could not connect to server: %s\n", err)
 	}
