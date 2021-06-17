@@ -35,8 +35,8 @@ func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 		i.Join(config.IRC.Channel)
 	})
 
-	disconnectHandler := i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, _ *irc.Line) {
-		log.Println("irc: disconnected")
+	disconnectHandler := i.HandleFunc(irc.DISCONNECTED, func(i *irc.Conn, l *irc.Line) {
+		log.Printf("irc: disconnected: %v\n", l.Raw)
 		err := i.Connect()
 		if err != nil {
 			log.Fatalf("irc: could not reconnect to server: %s\n", err)
