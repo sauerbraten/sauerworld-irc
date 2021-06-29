@@ -23,16 +23,6 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 		if err != nil {
 			log.Printf("setting 'listening' activity: %v\n", err)
 		}
-		err = s.UpdateStatusComplex(discordgo.UpdateStatusData{
-			Status: "online",
-			Activities: []*discordgo.Activity{{
-				Type: discordgo.ActivityTypeCustom,
-				Name: fmt.Sprintf("Bridging %s on %s", config.IRC.Channel, config.IRC.ServerName),
-			}},
-		})
-		if err != nil {
-			log.Printf("setting 'briding' activity: %v\n", err)
-		}
 	})
 
 	d.AddHandler(func(_ *discordgo.Session, _ *discordgo.Disconnect) {
