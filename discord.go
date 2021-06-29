@@ -16,8 +16,13 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 		log.Fatalf("discord: error creating session: %v\n", err)
 	}
 
-	d.AddHandler(func(_ *discordgo.Session, _ *discordgo.Connect) {
+	d.AddHandler(func(s *discordgo.Session, _ *discordgo.Connect) {
 		log.Println("discord: connected")
+		// can't use custom status as a bot: https://github.com/discord/discord-api-docs/issues/1160#issuecomment-546549516
+		err := s.UpdateListeningStatus(fmt.Sprintf("%s on %s", config.IRC.Channel, config.IRC.ServerName))
+		if err != nil {
+			log.Printf("setting 'listening' activity: %v\n", err)
+		}
 	})
 
 	d.AddHandler(func(_ *discordgo.Session, _ *discordgo.Disconnect) {
