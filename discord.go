@@ -44,7 +44,7 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 			if len(inReplyTo) > 60 {
 				inReplyTo = inReplyTo[:56] + " […]"
 			}
-			fromDiscord <- fmt.Sprintf("<%s> > %s", author(d, m.Message), inReplyTo)
+			fromDiscord <- fmt.Sprintf("<%s> %s", author(d, m.Message), inReplyTo)
 		}
 
 		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m.Message)), "\n") {
