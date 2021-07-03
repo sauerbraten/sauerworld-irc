@@ -4,17 +4,19 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 var (
 	IRC = struct {
-		ServerName string
-		ServerPort string
-		TLS        bool
-		Channel    string
-		Nick       string
-		Username   string
-		Realname   string
+		ServerName  string
+		ServerPort  string
+		TLS         bool
+		Channel     string
+		Nick        string
+		Username    string
+		Realname    string
+		IgnoreNicks map[string]struct{}
 	}{
 		mustEnv("IRC_SERVER_NAME"),
 		mustEnv("IRC_SERVER_PORT"),
@@ -23,6 +25,7 @@ var (
 		mustEnv("IRC_NICK"),
 		mustEnv("IRC_USERNAME"),
 		mustEnv("IRC_REALNAME"),
+		parseListAsSet(mustEnv("IRC_IGNORE_NICKS")),
 	}
 
 	Discord = struct {
@@ -48,4 +51,12 @@ func mustBool(s string) bool {
 		log.Fatalf("parsing '%s' as boolean: %v\n", s, err)
 	}
 	return b
+}
+
+func parseListAsSet(s string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, elem := range strings.FieldsFunc(s, func(c rune) bool { return c == ',' }) {
+		set[elem] = struct{}{}
+	}
+	return set
 }

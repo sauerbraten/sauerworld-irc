@@ -48,6 +48,9 @@ func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 		if !line.Public() || line.Target() != config.IRC.Channel || line.Nick == i.Me().Nick {
 			return
 		}
+		if _, ok := config.IRC.IgnoreNicks[line.Nick]; ok {
+			return
+		}
 		fromIRC <- i2d(d, line)
 	})
 
