@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+
 	"github.com/sauerbraten/sauerworld-irc/config"
 )
 
-func setupDiscord() (*discordgo.Session, <-chan string, func()) {
-	d, err := discordgo.New("Bot " + config.Discord.Token)
+func setupDiscord() (<-chan string, func()) {
+	var err error
+	d, err = discordgo.New("Bot " + config.Discord.Token)
 	if err != nil {
 		log.Fatalf("discord: error creating session: %v\n", err)
 	}
@@ -30,29 +32,14 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 	})
 
 	fromDiscord := make(chan string, 10)
-	d.AddHandler(func(d *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.ChannelID != config.Discord.ChannelID ||
-			(m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply) ||
+	d.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
+		if (m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply) ||
 			m.WebhookID != "" ||
 			m.Author.ID == d.State.User.ID {
 			return
 		}
 
-		if m.Type == discordgo.MessageTypeReply {
-			m.ReferencedMessage.GuildID = m.GuildID
-			inReplyTo := d2i(d, m.ReferencedMessage)
-			if len(inReplyTo) > 60 {
-				inReplyTo = inReplyTo[:56] + " […]"
-			}
-			fromDiscord <- fmt.Sprintf("<%s> %s", author(d, m.Message), inReplyTo)
-		}
-
-		for i, line := range strings.Split(strings.TrimSpace(d2i(d, m.Message)), "\n") {
-			if i > 0 {
-				line = "    " + line
-			}
-			fromDiscord <- line
-		}
+		proxyMessage(m.Message, fromDiscord)
 	})
 
 	d.Identify.Intents = discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessages
@@ -62,7 +49,7 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 		log.Fatalf("discord: error opening session: %v\n", err)
 	}
 
-	return d, fromDiscord, func() {
+	return fromDiscord, func() {
 		err := d.Close()
 		if err != nil {
 			log.Printf("discord: error closing connection: %v\n", err)
@@ -70,11 +57,29 @@ func setupDiscord() (*discordgo.Session, <-chan string, func()) {
 	}
 }
 
-func author(d *discordgo.Session, m *discordgo.Message) string {
+func proxyMessage(m *discordgo.Message, fromDiscord chan<- string) {
+	if m.Type == discordgo.MessageTypeReply {
+		m.ReferencedMessage.GuildID = m.GuildID
+		inReplyTo := d2i(m.ReferencedMessage)
+		if len(inReplyTo) > 60 {
+			inReplyTo = inReplyTo[:56] + " […]"
+		}
+		fromDiscord <- fmt.Sprintf("<%s> %s", author(m), inReplyTo)
+	}
+
+	for i, line := range strings.Split(strings.TrimSpace(d2i(m)), "\n") {
+		if i > 0 {
+			line = "    " + line
+		}
+		fromDiscord <- line
+	}
+}
+
+func author(m *discordgo.Message) string {
 	if m.Member != nil && m.Member.Nick != "" {
 		return m.Member.Nick
 	}
-	author, err := getMember(d, m.GuildID, m.Author.ID)
+	author, err := getMember(m.GuildID, m.Author.ID)
 	if err != nil {
 		log.Printf("resolving message author name: %v\n", err)
 		log.Printf("message: %+v\n", m)
@@ -90,12 +95,12 @@ var (
 	customEmojiPattern = regexp.MustCompile(`<(:[^:]+:)\d+>`)
 )
 
-func d2i(d *discordgo.Session, m *discordgo.Message) string {
+func d2i(m *discordgo.Message) string {
 	// user and role mentions
 	replacements := []string{}
 	for _, user := range m.Mentions {
 		nick := user.Username
-		member, err := getMember(d, m.GuildID, user.ID)
+		member, err := getMember(m.GuildID, user.ID)
 		if err != nil {
 			log.Printf("discord: error getting member: %v\n", err)
 		} else if member.Nick != "" {
@@ -104,7 +109,7 @@ func d2i(d *discordgo.Session, m *discordgo.Message) string {
 		replacements = append(replacements, "<@"+user.ID+">", "@"+nick, "<@!"+user.ID+">", "@"+nick)
 	}
 	for _, roleID := range m.MentionRoles {
-		role, err := getRole(d, m.GuildID, roleID)
+		role, err := getRole(m.GuildID, roleID)
 		if err != nil {
 			log.Printf("discord: error getting role: %v\n", err)
 			continue
@@ -118,7 +123,7 @@ func d2i(d *discordgo.Session, m *discordgo.Message) string {
 
 	// channel mentions
 	content = channelPattern.ReplaceAllStringFunc(content, func(mention string) string {
-		channel, err := getChannel(d, mention[2:len(mention)-1])
+		channel, err := getChannel(mention[2 : len(mention)-1])
 		if err != nil {
 			log.Printf("discord: error getting channel: %v\n", err)
 			return mention
@@ -141,7 +146,7 @@ func d2i(d *discordgo.Session, m *discordgo.Message) string {
 		// a reply to something someone on IRC said), so we don't prepend our
 		// own nick and instead rely on the IRC nick being part of the message
 	} else {
-		authorName = fmt.Sprintf("<%s> ", author(d, m))
+		authorName = fmt.Sprintf("<%s> ", author(m))
 	}
 
 	if len(attachmentURLs) > 0 {
@@ -153,7 +158,7 @@ func d2i(d *discordgo.Session, m *discordgo.Message) string {
 	return fmt.Sprintf("%s%s", authorName, content)
 }
 
-func getMember(d *discordgo.Session, guildID, userID string) (*discordgo.Member, error) {
+func getMember(guildID, userID string) (*discordgo.Member, error) {
 	member, err := d.State.Member(guildID, userID)
 	if err == discordgo.ErrStateNotFound {
 		member, err = d.GuildMember(guildID, userID)
@@ -164,7 +169,7 @@ func getMember(d *discordgo.Session, guildID, userID string) (*discordgo.Member,
 	return member, err
 }
 
-func getChannel(d *discordgo.Session, channelID string) (*discordgo.Channel, error) {
+func getChannel(channelID string) (*discordgo.Channel, error) {
 	channel, err := d.State.Channel(channelID)
 	if err == discordgo.ErrStateNotFound {
 		channel, err = d.Channel(channelID)
@@ -175,7 +180,7 @@ func getChannel(d *discordgo.Session, channelID string) (*discordgo.Channel, err
 	return channel, err
 }
 
-func getRole(d *discordgo.Session, guildID, roleID string) (*discordgo.Role, error) {
+func getRole(guildID, roleID string) (*discordgo.Role, error) {
 	role, err := d.State.Role(guildID, roleID)
 	if err == discordgo.ErrStateNotFound {
 		roles, err := d.GuildRoles(guildID)
@@ -191,7 +196,7 @@ func getRole(d *discordgo.Session, guildID, roleID string) (*discordgo.Role, err
 	return role, err
 }
 
-func name2mention(d *discordgo.Session, name string) string {
+func name2mention(name string) string {
 	for _, guild := range d.State.Guilds {
 		for _, member := range guild.Members {
 			if member.Nick == name {

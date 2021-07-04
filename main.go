@@ -6,12 +6,20 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bwmarrin/discordgo"
+	irc "github.com/fluffle/goirc/client"
+
 	"github.com/sauerbraten/sauerworld-irc/config"
 )
 
+var (
+	d *discordgo.Session
+	i *irc.Conn
+)
+
 func main() {
-	d, fromDiscord, stopDiscord := setupDiscord()
-	i, fromIRC, stopIRC := setupIRC(d)
+	fromDiscord, stopDiscord := setupDiscord() // sets global d
+	fromIRC, stopIRC := setupIRC()             // sets global i
 
 	go func() {
 		for m := range fromIRC {
