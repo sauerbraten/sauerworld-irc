@@ -33,7 +33,8 @@ func setupDiscord() (<-chan string, func()) {
 
 	fromDiscord := make(chan string, 10)
 	d.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
-		if (m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply) ||
+		if m.ChannelID != config.Discord.ChannelID ||
+			(m.Type != discordgo.MessageTypeDefault && m.Type != discordgo.MessageTypeReply) ||
 			m.WebhookID != "" ||
 			m.Author.ID == d.State.User.ID {
 			return
