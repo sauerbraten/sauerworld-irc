@@ -19,6 +19,7 @@ func setupIRC(d *discordgo.Session) (*irc.Conn, <-chan string, func()) {
 		c.SSLConfig = &tls.Config{ServerName: config.IRC.ServerName}
 	}
 	c.Server = config.IRC.ServerName + ":" + config.IRC.ServerPort
+	c.Pass = config.IRC.SASLPassword
 
 	i := irc.Client(c)
 

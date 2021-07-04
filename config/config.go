@@ -9,14 +9,15 @@ import (
 
 var (
 	IRC = struct {
-		ServerName  string
-		ServerPort  string
-		TLS         bool
-		Channel     string
-		Nick        string
-		Username    string
-		Realname    string
-		IgnoreNicks map[string]struct{}
+		ServerName   string
+		ServerPort   string
+		TLS          bool
+		Channel      string
+		Nick         string
+		Username     string
+		Realname     string
+		SASLPassword string
+		IgnoreNicks  map[string]struct{}
 	}{
 		mustEnv("IRC_SERVER_NAME"),
 		mustEnv("IRC_SERVER_PORT"),
@@ -25,6 +26,7 @@ var (
 		mustEnv("IRC_NICK"),
 		mustEnv("IRC_USERNAME"),
 		mustEnv("IRC_REALNAME"),
+		mustEnv("IRC_SASL_PASSWORD"),
 		parseListAsSet(mustEnv("IRC_IGNORE_NICKS")),
 	}
 
