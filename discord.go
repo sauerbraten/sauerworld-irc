@@ -138,7 +138,7 @@ func d2i(m *discordgo.Message) string {
 	// attachments (files, e.g. images)
 	attachmentURLs := []string{}
 	for _, a := range m.Attachments {
-		attachmentURLs = append(attachmentURLs, a.ProxyURL)
+		attachmentURLs = append(attachmentURLs, a.URL)
 	}
 
 	authorName := ""
