@@ -62,9 +62,6 @@ func proxyMessage(m *discordgo.Message, fromDiscord chan<- string) {
 	if m.Type == discordgo.MessageTypeReply {
 		m.ReferencedMessage.GuildID = m.GuildID
 		inReplyTo := d2i(m.ReferencedMessage)
-		if len(inReplyTo) > 60 {
-			inReplyTo = inReplyTo[:56] + " […]"
-		}
 		fromDiscord <- fmt.Sprintf("<%s> %s", author(m), inReplyTo)
 	}
 
